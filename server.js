@@ -84,60 +84,6 @@ app.post('/slack/actions', async (req, res) => {
   res.status(400).send('Invalid action');
 });
 
-app.post('/slack/shortcuts', async (req, res) => {
-  const payload = JSON.parse(req.body.payload);
-  
-  if (payload.callback_id === 'check_grammar_shortcut') {
-    // Get the message text that was selected
-    const messageText = payload.message.text;
-    
-    // Open a modal with the text pre-filled
-    await axios.post('https://slack.com/api/views.open', {
-      trigger_id: payload.trigger_id,
-      view: {
-        type: 'modal',
-        callback_id: 'grammar_modal',
-        title: {
-          type: 'plain_text',
-          text: 'Grammar Check'
-        },
-        submit: {
-          type: 'plain_text',
-          text: 'Check'
-        },
-        close: {
-          type: 'plain_text',
-          text: 'Cancel'
-        },
-        blocks: [
-          {
-            type: 'input',
-            block_id: 'text_block',
-            label: {
-              type: 'plain_text',
-              text: 'Edit your message'
-            },
-            element: {
-              type: 'plain_text_input',
-              action_id: 'user_text_input',
-              initial_value: messageText
-            }
-          }
-        ]
-      }
-    }, {
-      headers: {
-        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    return res.status(200).send();
-  }
-  
-  res.status(400).send('Invalid shortcut');
-});
-
 async function checkGrammar(text) {
   try {
     const completion = await groq.chat.completions.create({
