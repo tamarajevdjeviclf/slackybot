@@ -1,13 +1,18 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import axios from 'axios';
+import { Groq } from 'groq-sdk';
+import dotenv from 'dotenv';
 
+dotenv.config();
 const app = express();
 const port = 3000;
 const SLACK_BOT_TOKEN = 'xoxb-8703104575057-8695379819459-9nteN7phb3ORUqdUGtGvanum';
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
 
 app.get('/', (req, res) => {
   res.send('Server is running!');
@@ -79,8 +84,21 @@ app.post('/slack/actions', async (req, res) => {
 });
 
 async function checkGrammar(text) {
-  // You can integrate grammar-check APIs here
-  return `Grammar-corrected: ${text}`;
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: 'You are a chatbot that corrects grammar. Provide a clear, concise, and precise corrected version of the following message in English:'
+        },
+        { role: 'user', content: text }
+      ],
+      model: 'llama-3.3-70b-versatile'
+    });
+    return completion.choices[0].message.content;
+  } catch (error) {
+    return text;
+  }
 }
 
 async function sendMessageWithButton(channelId) {
