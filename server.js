@@ -4,68 +4,101 @@ import axios from 'axios';
 
 const app = express();
 const port = 3000;
+const SLACK_BOT_TOKEN = 'xoxb-8703104575057-8695379819459-9nteN7phb3ORUqdUGtGvanum';
 
-//Middleware za parsiranje JSON tela
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-//Slack bot token (dobija se prilikom kreiranja aplikacije u Slack-u)
-const SLACK_BOT_TOKEN = 'xoxb-8703104575057-8695379819459-9nteN7phb3ORUqdUGtGvanum';
 app.get('/', (req, res) => {
-    res.send('Server je pokrenut!');
-  });
+  res.send('Server is running!');
+});
 
-//Pritiskom na dugme se ovde dolazi, ali kroz req mi ne stigne poruka koju sam unela
 app.post('/slack/actions', async (req, res) => {
-  
+  if (!req.body.payload) return res.status(400).send();
+
   const payload = JSON.parse(req.body.payload);
-  console.log('tamara' + JSON.stringify(req.body));
 
-  if (payload.actions[0].action_id === 'check_grammar_button') {
-    console.log('Dugme pritisnuto!');
+  // Modal submission handler
+  if (payload.type === 'view_submission' && payload.view.callback_id === 'grammar_modal') {
+    const userInput = payload.view.state.values.text_block.user_text_input.value;
+    const correctedText = await checkGrammar(userInput);
 
-    const originalText = payload.text;
+    return res.json({
+      response_action: 'errors',
+      errors: {
+        text_block: `✅ ${correctedText}`
+      }
+    });
+  }
 
-    console.log('Originalni tekst:', originalText);
-    const correctedText = await checkGrammar(originalText);
-
-    await axios.post('https://slack.com/api/chat.postMessage', {
-      channel: payload.channel.id,
-      text: `Ispravljena poruka: ${correctedText}`,
+  // Button click handler (to open modal)
+  if (payload.type === 'block_actions' && payload.actions[0].action_id === 'check_grammar_button') {
+    await axios.post('https://slack.com/api/views.open', {
+      trigger_id: payload.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'grammar_modal',
+        title: {
+          type: 'plain_text',
+          text: 'Grammar Check'
+        },
+        submit: {
+          type: 'plain_text',
+          text: 'Check'
+        },
+        close: {
+          type: 'plain_text',
+          text: 'Cancel'
+        },
+        blocks: [
+          {
+            type: 'input',
+            block_id: 'text_block',
+            label: {
+              type: 'plain_text',
+              text: 'Enter your message'
+            },
+            element: {
+              type: 'plain_text_input',
+              action_id: 'user_text_input'
+            }
+          }
+        ]
+      }
     }, {
       headers: {
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
+        Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
     });
-    
-    res.status(200).send('Ok');
-  } else {
-    res.status(400).send('Invalid action');
+
+    return res.status(200).send();
   }
+
+  res.status(400).send('Invalid action');
 });
 
 async function checkGrammar(text) {
-    //ovde dodati slanje zahteva ka nekom AI alatu
-    return `Ispravljena gramatika: ${text}`;
+  // You can integrate grammar-check APIs here
+  return `Grammar-corrected: ${text}`;
 }
 
 async function sendMessageWithButton(channelId) {
   const messagePayload = {
     channel: channelId,
-    text: 'Kliknite dugme da biste proverili gramatiku!',
+    text: 'Click the button to check grammar!',
     blocks: [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: 'Kliknite na dugme da proverite gramatiku.'
+          text: 'Click the button to check grammar.'
         },
         accessory: {
           type: 'button',
           text: {
             type: 'plain_text',
-            text: 'Proveri gramatiku'
+            text: 'Check Grammar'
           },
           action_id: 'check_grammar_button'
         }
@@ -73,84 +106,30 @@ async function sendMessageWithButton(channelId) {
     ]
   };
 
-  try {
-    const response = await axios.post('https://slack.com/api/chat.postMessage', messagePayload, {
-      headers: {
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/json; charset=utf-8'
-      }
-    });
-
-    console.log('Poruka poslata u kanal:', channelId);
-  } catch (error) {
-    console.error('Greška pri slanju poruke:', error);
-  }
+  await axios.post('https://slack.com/api/chat.postMessage', messagePayload, {
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
 }
 
 async function sendMessageToAllChannels() {
-  try {
-    const channelsResponse = await axios.get('https://slack.com/api/conversations.list', {
-      headers: {
-        'Authorization': `Bearer ${SLACK_BOT_TOKEN}`
-      }
-    });
-
-    if (!channelsResponse.data.ok) {
-      console.error('Greška pri dobijanju kanala:', channelsResponse.data.error);
-      return;
+  const channelsResponse = await axios.get('https://slack.com/api/conversations.list', {
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`
     }
+  });
 
-    const channels = channelsResponse.data.channels;
+  const channels = channelsResponse.data.channels;
 
-    // Ovde dodajem bota u sve kanale - mozda ovo nije neophodno
-    for (const channel of channels) {
-      if (channel.is_channel) {
-        await sendMessageWithButton(channel.id, '');
-      }
+  for (const channel of channels) {
+    if (channel.is_channel && !channel.is_archived && channel.is_member) {
+      await sendMessageWithButton(channel.id);
     }
-  } catch (error) {
-    console.error('Greška pri slanju poruka u sve kanale:', error);
   }
 }
-async function addBotToChannels() {
-    try {
-      const channelsResponse = await axios.get('https://slack.com/api/conversations.list', {
-        headers: {
-          'Authorization': `Bearer ${SLACK_BOT_TOKEN}`
-        }
-      });
-  
-      if (!channelsResponse.data.ok) {
-        console.error('Greška pri dobijanju kanala:', channelsResponse.data.error);
-        return;
-      }
-  
-      const channels = channelsResponse.data.channels;
-  
-      // Prolazimo kroz sve kanale i dodajemo bota
-      for (const channel of channels) {
-        if (channel.is_channel) {
-          console.log(`Dodajem bota u kanal: ${channel.id}`);
-          
-          await axios.post('https://slack.com/api/conversations.join', {
-            channel: channel.id
-          }, {
-            headers: {
-              'Authorization': `Bearer ${SLACK_BOT_TOKEN}`,
-              'Content-Type': 'application/json; charset=utf-8'
-            }
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Greška pri dodavanju bota u kanale:', error);
-    }
-  }
-  
-  addBotToChannels();
-  
-sendMessageToAllChannels();
 
 app.listen(port, () => {
-  console.log(`Server je pokrenut na http://localhost:${port}`);
+  sendMessageToAllChannels();
 });
