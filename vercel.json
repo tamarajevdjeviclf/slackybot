@@ -2,14 +2,30 @@
   "version": 2,
   "builds": [
     {
-      "src": "server.js",
+      "src": "./server.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/",
+      "methods": ["GET"],
+      "dest": "/server.js"
+    },
+    {
+      "src": "/slack/actions",
+      "methods": ["POST"],
+      "dest": "/server.js"
+    },
+    {
+      "src": "/slack/command",
+      "methods": ["POST"],
       "dest": "/server.js"
     }
-  ]
+  ],
+  "env": {
+    "SLACK_BOT_TOKEN": "@slack_bot_token",
+    "GROQ_API_KEY": "@groq_api_key"
+  },
+  "regions": ["all"]
 }
