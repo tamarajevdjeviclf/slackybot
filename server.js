@@ -94,10 +94,6 @@ app.post('/slack/actions', async (req, res) => {
         .replace(/<[^>]+>/g, '') // Remove any other Slack formatting
         .trim();
 
-    if (!messageText) {
-      messageText = "No text found to check. Please type your message below.";
-    }
-
     try {
       await axios.post('https://slack.com/api/views.open', {
         trigger_id: payload.trigger_id,
@@ -150,6 +146,51 @@ app.post('/slack/actions', async (req, res) => {
   return res.status(400).send('Invalid action');
 });
 
+app.post('/slack/command', async (req, res) => {
+  // Respond immediately to avoid timeout
+  res.status(200).send();
+  
+  const text = req.body.text;
+  const responseUrl = req.body.response_url;
+  
+  if (!text) {
+    await axios.post(responseUrl, {
+      response_type: 'ephemeral',
+      text: 'Please provide some text to check grammar.'
+    });
+    return;
+  }
+  
+  const correctedText = await checkGrammar(text);
+  
+  await axios.post(responseUrl, {
+    response_type: 'ephemeral',
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Grammar Checker* :memo:'
+        }
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+         text: `*Original Text:*\n\`\`\`${text}\`\`\``
+        }
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Corrected Text:*\n\`\`\`${correctedText}\`\`\``
+        }
+      }
+    ]
+  });
+});
+
 async function checkGrammar(text) {
   if (!text || text.trim().length === 0) {
     return "No text provided for grammar check.";
@@ -178,6 +219,74 @@ async function checkGrammar(text) {
   }
 }
 
+
+async function sendMessageWithButton(channelId) {
+  const messagePayload = {
+    channel: channelId,
+    text: ' ',
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Grammar Checker* :memo:\nImprove your messages with our grammar checking tool!'
+        }
+      },
+      {
+        type: 'divider'
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: ':pencil2: Check Grammar',
+              emoji: true
+            },
+            style: 'primary',
+            action_id: 'check_grammar_button'
+          }
+        ]
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: 'Grammar Bot helps you write better messages with AI-powered suggestions.'
+          }
+        ]
+      }
+    ]
+  };
+
+  await axios.post('https://slack.com/api/chat.postMessage', messagePayload, {
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      'Content-Type': 'application/json'
+    }
+  });
+}
+
+async function sendMessageToAllChannels() {
+  const channelsResponse = await axios.get('https://slack.com/api/conversations.list', {
+    headers: {
+      Authorization: `Bearer ${SLACK_BOT_TOKEN}`
+    }
+  });
+
+  const channels = channelsResponse.data.channels;
+
+  for (const channel of channels) {
+    if (channel.is_channel && !channel.is_archived && channel.is_member) {
+      await sendMessageWithButton(channel.id);
+    }
+  }
+}
+
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
+  sendMessageToAllChannels();
 });
