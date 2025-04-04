@@ -220,7 +220,6 @@ async function checkGrammar(text) {
   }
 }
 
-
 async function sendMessageWithButton(channelId) {
   const messagePayload = {
     channel: channelId,
