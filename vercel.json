@@ -2,25 +2,25 @@
   "version": 2,
   "builds": [
     {
-      "src": "./server.js",
+      "src": "server.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/",
+      "src": "/(.*)",
       "methods": ["GET"],
-      "dest": "/server.js"
+      "dest": "server.js"
     },
     {
       "src": "/slack/actions",
       "methods": ["POST"],
-      "dest": "/server.js"
+      "dest": "server.js"
     },
     {
       "src": "/slack/command",
       "methods": ["POST"],
-      "dest": "/server.js"
+      "dest": "server.js"
     }
   ],
   "env": {
