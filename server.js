@@ -162,7 +162,7 @@ async function sendMessageToAllChannels() {
   const channels = channelsResponse.data.channels;
 
   for (const channel of channels) {
-    if (channel.is_channel && !channel.is_archived && channel.is_member) {
+    if (channel.is_channel && !channel.is_archived) {
       await sendMessageWithButton(channel.id);
     }
   }
