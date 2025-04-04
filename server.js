@@ -191,6 +191,7 @@ app.post('/slack/command', async (req, res) => {
   });
 });
 
+
 async function checkGrammar(text) {
   if (!text || text.trim().length === 0) {
     return "No text provided for grammar check.";
